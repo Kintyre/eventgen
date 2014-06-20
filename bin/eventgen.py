@@ -3,9 +3,11 @@ Copyright (C) 2005-2012 Splunk Inc. All Rights Reserved.
 '''
 from __future__ import division
 
-import sys, os
+import sys, os, glob
 path_prepend = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib')
 sys.path.append(path_prepend)
+# Just add all eggs into the path!  (UF's don't ship with python, and therefore are missing httplib2)
+sys.path.extend(glob.glob(os.path.join(path_prepend, "*.egg")))
 
 import logging
 import threading
