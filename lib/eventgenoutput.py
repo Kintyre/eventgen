@@ -268,7 +268,7 @@ class Output:
             self._queue.clear()
             self._flush(q)
 
-        elif self._outputMode in ('file'):
+        elif self._outputMode in ('file', 'http-post'):
             # q = copy.deepcopy(self._queue)
             # self._queue.clear()
             # self._flush(q)
@@ -373,7 +373,7 @@ class Output:
                     #        msg += '\n'
                         # logger.debug("Sending %s to self._splunkhttp" % msg)
                     #    splunkhttp.send(msg)
-                    elif self._outputMode in ('splunkstream', 'stormstream'):
+                    elif self._outputMode in ('splunkstream', 'stormstream', 'http-post'):
                         streamout += msg
                     
                     msg = queue.popleft()['_raw']
@@ -455,3 +455,9 @@ class Output:
                     self._splunkhttp = None
                 except httplib.BadStatusLine:
                     logger.error("Received bad status from Storm for sample '%s'" % self._sample)
+        elif self._outputMode == 'http-post':
+            if len(streamout) > 0:
+                http_post_url = "http://localhost/log"  # Hardcoded, for now...
+                myhttp = httplib2.Http(disable_ssl_certificate_validation=True)
+                response = myhttp.request(http_post_url, 'POST', headers={ "content-type":"text/plain" }, body=streamout)
+                logger.info("Sending events to %s,  bytes=%s, lines=%s, response=%r", http_post_url, len(streamout), len(streamout.split("\n")), response[0]["status"])

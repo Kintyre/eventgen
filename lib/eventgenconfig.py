@@ -96,7 +96,7 @@ class Config:
     _validTokenTypes = {'token': 0, 'replacementType': 1, 'replacement': 2}
     _validHostTokens = {'token': 0, 'replacement': 1}
     _validReplacementTypes = ['static', 'timestamp', 'replaytimestamp', 'random', 'rated', 'file', 'mvfile', 'integerid']
-    _validOutputModes = ['spool', 'file', 'splunkstream', 'stormstream']
+    _validOutputModes = ['spool', 'file', 'splunkstream', 'stormstream', 'http-post']
     _validSplunkMethods = ['http', 'https']
     _validSampleTypes = ['raw', 'csv']
     _validModes = ['sample', 'replay']
