@@ -2,7 +2,7 @@
 # This should be run from the $SPLUNK_HOME/etc/apps/oidemo directory.
 
 # Save for later
-CURRENT_PWD=`pwd`
+CURRENT_PWD="`pwd`"
 
 # Cleanup
 rm $CURRENT_PWD/eventgen.spl
@@ -16,7 +16,7 @@ cp -R * $BUILD_DIR
 cd $BUILD_DIR_PARENT
 rm SA-Eventgen/local/eventgen-standalone.conf
 tar cfz $CURRENT_PWD/eventgen.spl SA-Eventgen --exclude "SA-Eventgen/eventgen.spl" --exclude "SA-Eventgen/.*"
-cd $CURRENT_PWD
 rm -rf $BUILD_DIR
+cd "$CURRENT_PWD"
 
 echo "Build Complete"
