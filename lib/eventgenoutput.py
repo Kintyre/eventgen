@@ -16,7 +16,10 @@ import threading
 import copy
 
 # The max number of threads setup for HTTP type outputs
-MAX_WORKERS = 5
+MAX_WORKERS = 25
+
+# Max queue size before flushing the stream (max events to send within a single HTTP(S) request)
+FLUSH_QUEUE_SIZE = 100
 
 
 # This is used only for the HTTP output outputModes
@@ -73,6 +76,7 @@ class Output:
     _projectID = None
     _accessToken = None
     _workers = None
+    _httpUrl = None
     
     validOutputModes = ['spool', 'file', 'splunkstream']
     validSplunkMethods = ['http', 'https']
@@ -104,6 +108,8 @@ class Output:
         if self._outputMode == 'spool':
             self._spoolDir = sample.pathParser(sample.spoolDir)
             self._spoolFile = sample.spoolFile
+        elif self._outputMode == 'http-post':
+            self._httpUrl = sample.httpUrl
         elif self._outputMode == 'file':
             if sample.fileName == None:
                 logger.error('outputMode file but file not specified for sample %s' % self._sample)
@@ -200,7 +206,7 @@ class Output:
         else:
             self._queue.append({'_raw': msg})
 
-        if self._outputMode in ('splunkstream', 'stormstream') and len(self._queue) > 1000:
+        if self._outputMode in ('splunkstream', 'stormstream', 'http-post') and len(self._queue) > FLUSH_QUEUE_SIZE:
             self.flush()
         elif len(self._queue) > 10:
             self.flush()
@@ -219,7 +225,7 @@ class Output:
     def flush(self, force=False):
         """Flushes output from the queue out to the specified output"""
         # Force a flush with a queue bigger than 1000, or unless forced
-        if (len(self._queue) >= 1000 or (force and len(self._queue) > 0)) \
+        if (len(self._queue) >= FLUSH_QUEUE_SIZE or (force and len(self._queue) > 0)) \
                 and self._outputMode in ('splunkstream', 'stormstream'):
             # For faster processing, we need to break these up by source combos
             # so they'll each get their own thread.
@@ -262,13 +268,34 @@ class Output:
                 self._workers.append(w)
                 
                 w.start()
-        elif (len(self._queue) >= 1000 or (force and len(self._queue) > 0)) \
+        elif (len(self._queue) >= FLUSH_QUEUE_SIZE or (force and len(self._queue) > 0)) \
                 and self._outputMode in ('spool'):
             q = copy.deepcopy(self._queue)
             self._queue.clear()
             self._flush(q)
-
-        elif self._outputMode in ('file', 'http-post'):
+        elif (len(self._queue) >= FLUSH_QUEUE_SIZE or (force and len(self._queue) > 0)) \
+                and self._outputMode in ('http-post'):
+            # Kick off a new thread (with its own copy of the current queue contents)
+            q = copy.deepcopy(self._queue)
+            self._queue.clear()
+            w = Worker(self._flush, q)
+            
+            for i in xrange(0, len(self._workers)):
+                if not self._workers[i].running:
+                    del self._workers[i]
+                    break
+            
+            while len(self._workers) > MAX_WORKERS:
+                logger.info("Waiting for http-post workers, limited to %s" % MAX_WORKERS)
+                for i in xrange(0, len(self._workers)):
+                    if not self._workers[i].running:
+                        del self._workers[i]
+                        break
+                time.sleep(0.5)
+            self._workers.append(w)
+            w.start()
+		
+        elif self._outputMode in ('file'):
             # q = copy.deepcopy(self._queue)
             # self._queue.clear()
             # self._flush(q)
@@ -282,6 +309,7 @@ class Output:
     def _flush(self, queue):
         """Internal function which does the real flush work"""
         splunkhttp = None
+        q_len = len(queue)
         if len(queue) > 0:
             streamout = ""
             # SHould now be getting a different output thread for each source
@@ -457,7 +485,17 @@ class Output:
                     logger.error("Received bad status from Storm for sample '%s'" % self._sample)
         elif self._outputMode == 'http-post':
             if len(streamout) > 0:
-                http_post_url = "http://localhost/log"  # Hardcoded, for now...
-                myhttp = httplib2.Http(disable_ssl_certificate_validation=True)
-                response = myhttp.request(http_post_url, 'POST', headers={ "content-type":"text/plain" }, body=streamout)
-                logger.info("Sending events to %s,  bytes=%s, lines=%s, response=%r", http_post_url, len(streamout), len(streamout.split("\n")), response[0]["status"])
+                try:
+                    http_start = time.time()
+                    myhttp = httplib2.Http(disable_ssl_certificate_validation=True)
+                    #http_connect = time.time()
+                    response = myhttp.request(self._httpUrl, 'POST', headers={ "content-type":"text/plain" }, body=streamout)
+                    http_end = time.time()
+                    del myhttp
+                    logger.info("Sent events to %s,  bytes=%s, events=%d, response=%s,  duration=%0.03f", self._httpUrl, len(streamout), q_len, response[0]["status"], 
+                    # connect=%0.03d,  (http_connect-http_start),
+                    (http_end-http_start))
+                    del response
+                except Exception, e:
+                    logger.exception("Exception while doing http-post stuff...")
+                
