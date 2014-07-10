@@ -495,6 +495,8 @@ class Output:
                     logger.info("Sent events to %s,  bytes=%s, events=%d, response=%s,  duration=%0.03f", self._httpUrl, len(streamout), q_len, response[0]["status"], 
                     # connect=%0.03d,  (http_connect-http_start),
                     (http_end-http_start))
+                    if response[0]["status"] != "200":
+                        logger.warn("Failed to send events to %s, status=%s\n%s", self._httpUrl, response[0]["status"], response[1])
                     del response
                 except Exception, e:
                     logger.exception("Exception while doing http-post stuff...")
